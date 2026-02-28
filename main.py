@@ -11,7 +11,14 @@ TARGET_BASE_URL = "https://cdn.moltyroyale.com"
 async def proxy_engine(path: str, request: Request):
     url = f"{TARGET_BASE_URL}/{path}"
     method = request.method
-    headers = {k: v for k, v in request.headers.items() if k.lower() != 'host'}
+    
+    # FILTER HEADER PENTING
+    # Kita hapus 'accept-encoding' agar server tidak mengirim data terkompresi (bikin tulisan acak)
+    headers = {
+        k: v for k, v in request.headers.items() 
+        if k.lower() not in ['host', 'accept-encoding', 'content-length']
+    }
+    
     body = await request.body()
 
     max_retries = 3
@@ -22,21 +29,22 @@ async def proxy_engine(path: str, request: Request):
                 url=url,
                 headers=headers,
                 data=body,
-                timeout=15
+                timeout=15,
+                allow_redirects=True
             )
             
-            # Coba kirim balik apa pun yang diberikan server asli
-            # Kita gunakan Response manual agar tidak error saat bukan JSON
+            # Kirim balik konten mentah dengan status code yang sama
             return Response(
                 content=resp.content,
                 status_code=resp.status_code,
-                headers={k: v for k, v in resp.headers.items() if k.lower() not in ['content-encoding', 'transfer-encoding']}
+                # Pastikan content-type tetap application/json
+                media_type="application/json"
             )
 
         except Exception as e:
             if attempt == max_retries - 1:
                 return Response(
-                    content=json.dumps({"error": "Molty Server Unreachable", "detail": str(e)}),
+                    content=json.dumps({"error": "Proxy Fail", "detail": str(e)}),
                     status_code=504,
                     media_type="application/json"
                 )
